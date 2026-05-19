@@ -85,10 +85,11 @@
     <div id="status"></div>
   </div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
-    import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
+  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore-compat.js"></script>
 
+  <script>
+    // 設定檔保持不變
     const firebaseConfig = {
       apiKey: "AIzaSyCoiGdzVj444DrYQibsnPZ9aApkQ7abmbA",
       authDomain: "datab-811c1.firebaseapp.com",
@@ -99,15 +100,15 @@
       measurementId: "G-27VLHPB5N0"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    // 初始化 Firebase (Compat 寫法)
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
     const inputArea = document.getElementById('msgInput');
     const submitBtn = document.getElementById('submitBtn');
     const statusTxt = document.getElementById('status');
     let cooldownTimer;
 
-    // 檢查冷卻狀態
     function checkCooldown() {
       const cooldownEnd = localStorage.getItem('cooldown_end');
       if (cooldownEnd) {
@@ -120,7 +121,6 @@
       }
     }
 
-    // 啟動冷卻 UI
     function startCooldownUI(seconds) {
       inputArea.disabled = true;
       submitBtn.disabled = true;
@@ -138,33 +138,30 @@
       }, 1000);
     }
 
-    // 發送邏輯
-    submitBtn.addEventListener('click', async () => {
+    submitBtn.addEventListener('click', () => {
       const text = inputArea.value.trim();
       if (!text) return;
 
       submitBtn.disabled = true;
       statusTxt.innerText = "發送中...";
 
-      try {
-        await addDoc(collection(db, "messages"), {
-          content: text,
-          timestamp: new Date()
-        });
-        
-        // 設定 30 秒冷卻
+      // 將資料寫入 Firebase (Compat 寫法)
+      db.collection("messages").add({
+        content: text,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp() // 使用伺服器時間更精準
+      })
+      .then(() => {
         const cooldownEnd = Date.now() + 30000;
         localStorage.setItem('cooldown_end', cooldownEnd);
         startCooldownUI(30);
-
-      } catch (e) {
-        console.error("發送失敗: ", e);
+      })
+      .catch((error) => {
+        console.error("發送失敗: ", error);
         statusTxt.innerText = "發生錯誤，請重試！";
         submitBtn.disabled = false;
-      }
+      });
     });
 
-    // 載入時執行檢查
     checkCooldown();
   </script>
 </body>
