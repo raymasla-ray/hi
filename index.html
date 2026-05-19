@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>答案卡</title>
+  <style>
+    body {
+      background-color: #121212;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .container {
+      background: #1e1e24;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(0, 210, 255, 0.2);
+      text-align: center;
+      width: 100%;
+      max-width: 400px;
+      border: 1px solid #333;
+    }
+    h1 {
+      color: #00d2ff;
+      text-shadow: 0 0 10px rgba(0, 210, 255, 0.5);
+      margin-bottom: 20px;
+    }
+    input {
+      width: 90%;
+      padding: 12px;
+      background: #2a2a35;
+      border: 1px solid #444;
+      color: #fff;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      outline: none;
+      font-size: 16px;
+      transition: 0.3s;
+    }
+    input:focus {
+      border-color: #00d2ff;
+      box-shadow: 0 0 10px rgba(0, 210, 255, 0.3);
+    }
+    button {
+      background: linear-gradient(45deg, #00d2ff, #3a7bd5);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: 0.3s;
+      width: 100%;
+    }
+    button:hover:not(:disabled) {
+      box-shadow: 0 0 15px #00d2ff;
+      transform: translateY(-2px);
+    }
+    button:disabled {
+      background: #555;
+      color: #888;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    #status {
+      margin-top: 15px;
+      color: #ff4757;
+      font-weight: bold;
+      min-height: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>歡迎任何答案(匿名)</h1>
+    <input type="text" id="msgInput" placeholder="輸入你想說的話...">
+    <button id="submitBtn">發送</button>
+    <div id="status"></div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
+    import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCoiGdzVj444DrYQibsnPZ9aApkQ7abmbA",
+      authDomain: "datab-811c1.firebaseapp.com",
+      projectId: "datab-811c1",
+      storageBucket: "datab-811c1.firebasestorage.app",
+      messagingSenderId: "181479643722",
+      appId: "1:181479643722:web:da549d48bc15bc26aee4b3",
+      measurementId: "G-27VLHPB5N0"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const inputArea = document.getElementById('msgInput');
+    const submitBtn = document.getElementById('submitBtn');
+    const statusTxt = document.getElementById('status');
+    let cooldownTimer;
+
+    // 檢查冷卻狀態
+    function checkCooldown() {
+      const cooldownEnd = localStorage.getItem('cooldown_end');
+      if (cooldownEnd) {
+        const now = Date.now();
+        if (now < cooldownEnd) {
+          startCooldownUI(Math.ceil((cooldownEnd - now) / 1000));
+        } else {
+          localStorage.removeItem('cooldown_end');
+        }
+      }
+    }
+
+    // 啟動冷卻 UI
+    function startCooldownUI(seconds) {
+      inputArea.disabled = true;
+      submitBtn.disabled = true;
+      
+      cooldownTimer = setInterval(() => {
+        statusTxt.innerText = `冷卻中... 請稍後 ${seconds} 秒`;
+        seconds--;
+        if (seconds < 0) {
+          clearInterval(cooldownTimer);
+          inputArea.disabled = false;
+          submitBtn.disabled = false;
+          statusTxt.innerText = '';
+          inputArea.value = '';
+        }
+      }, 1000);
+    }
+
+    // 發送邏輯
+    submitBtn.addEventListener('click', async () => {
+      const text = inputArea.value.trim();
+      if (!text) return;
+
+      submitBtn.disabled = true;
+      statusTxt.innerText = "發送中...";
+
+      try {
+        await addDoc(collection(db, "messages"), {
+          content: text,
+          timestamp: new Date()
+        });
+        
+        // 設定 30 秒冷卻
+        const cooldownEnd = Date.now() + 30000;
+        localStorage.setItem('cooldown_end', cooldownEnd);
+        startCooldownUI(30);
+
+      } catch (e) {
+        console.error("發送失敗: ", e);
+        statusTxt.innerText = "發生錯誤，請重試！";
+        submitBtn.disabled = false;
+      }
+    });
+
+    // 載入時執行檢查
+    checkCooldown();
+  </script>
+</body>
+</html>
