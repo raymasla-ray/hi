@@ -2,97 +2,84 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>答案卡</title>
   <style>
     body {
-      background-color: #121212;
-      color: #e0e0e0;
+      background-color: #0f172a; /* 專業深藍背景 */
+      color: #f1f5f9;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       display: flex;
-      justify-content: center;
+      flex-direction: column;
       align-items: center;
+      justify-content: center;
       height: 100vh;
       margin: 0;
     }
     .container {
-      background: #1e1e24;
-      padding: 40px;
+      background-color: #1e293b;
+      padding: 30px;
       border-radius: 12px;
-      box-shadow: 0 0 20px rgba(0, 210, 255, 0.2);
-      text-align: center;
-      width: 100%;
-      max-width: 400px;
-      border: 1px solid #333;
-    }
-    h1 {
-      color: #00d2ff;
-      text-shadow: 0 0 10px rgba(0, 210, 255, 0.5);
-      margin-bottom: 20px;
-    }
-    input {
+      border: 1px solid #334155; /* 實線邊框，無發光特效 */
       width: 90%;
-      padding: 12px;
-      background: #2a2a35;
-      border: 1px solid #444;
-      color: #fff;
-      border-radius: 6px;
-      margin-bottom: 20px;
-      outline: none;
-      font-size: 16px;
-      transition: 0.3s;
+      max-width: 400px;
+      text-align: center;
     }
-    input:focus {
-      border-color: #00d2ff;
-      box-shadow: 0 0 10px rgba(0, 210, 255, 0.3);
+    input[type="text"] {
+      width: 100%;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      border: 1px solid #475569;
+      background-color: #0f172a;
+      color: #f1f5f9;
+      font-size: 18px;
+      box-sizing: border-box;
     }
     button {
-      background: linear-gradient(45deg, #00d2ff, #3a7bd5);
+      width: 100%;
+      padding: 15px;
+      background-color: #2563eb; /* 深藍色按鈕 */
       color: white;
       border: none;
-      padding: 12px 24px;
-      font-size: 16px;
-      border-radius: 6px;
+      border-radius: 8px;
+      font-size: 18px;
       cursor: pointer;
-      font-weight: bold;
-      transition: 0.3s;
-      width: 100%;
+      transition: background-color 0.2s;
     }
     button:hover:not(:disabled) {
-      box-shadow: 0 0 15px #00d2ff;
-      transform: translateY(-2px);
+      background-color: #1d4ed8;
     }
     button:disabled {
-      background: #555;
-      color: #888;
+      background-color: #475569;
       cursor: not-allowed;
-      box-shadow: none;
+      color: #94a3b8;
     }
     #status {
       margin-top: 15px;
-      color: #ff4757;
-      font-weight: bold;
-      min-height: 20px;
+      font-size: 16px;
+      color: #93c5fd;
+      height: 20px;
     }
   </style>
 </head>
 <body>
 
   <div class="container">
-    <h1>歡迎任何答案(匿名)</h1>
-    <input type="text" id="msgInput" placeholder="輸入你想說的話...">
-    <button id="submitBtn">發送</button>
+    <h2>匿名傳送答案</h2>
+    <input type="text" id="messageInput" placeholder="請輸入內容..." autocomplete="off" maxlength="20">
+    <button id="sendBtn">送 出</button>
     <div id="status"></div>
   </div>
 
-  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore-compat.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+    import { getDatabase, ref, push } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
 
-  <script>
-    // 設定檔保持不變
     const firebaseConfig = {
       apiKey: "AIzaSyCoiGdzVj444DrYQibsnPZ9aApkQ7abmbA",
       authDomain: "datab-811c1.firebaseapp.com",
+      databaseURL: "https://datab-811c1-default-rtdb.asia-southeast1.firebasedatabase.app", // 補上資料庫網址
       projectId: "datab-811c1",
       storageBucket: "datab-811c1.firebasestorage.app",
       messagingSenderId: "181479643722",
@@ -100,68 +87,72 @@
       measurementId: "G-27VLHPB5N0"
     };
 
-    // 初始化 Firebase (Compat 寫法)
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
 
-    const inputArea = document.getElementById('msgInput');
-    const submitBtn = document.getElementById('submitBtn');
-    const statusTxt = document.getElementById('status');
-    let cooldownTimer;
+    const input = document.getElementById('messageInput');
+    const btn = document.getElementById('sendBtn');
+    const status = document.getElementById('status');
+    const COOLDOWN_TIME = 30000; // 30秒
 
+    // 檢查是否有正在進行的冷卻
     function checkCooldown() {
-      const cooldownEnd = localStorage.getItem('cooldown_end');
-      if (cooldownEnd) {
-        const now = Date.now();
-        if (now < cooldownEnd) {
-          startCooldownUI(Math.ceil((cooldownEnd - now) / 1000));
-        } else {
-          localStorage.removeItem('cooldown_end');
+      const lastSent = localStorage.getItem('lastSentTime');
+      if (lastSent) {
+        const timePassed = Date.now() - parseInt(lastSent);
+        if (timePassed < COOLDOWN_TIME) {
+          const remainingSeconds = Math.ceil((COOLDOWN_TIME - timePassed) / 1000);
+          startCooldownUI(remainingSeconds);
         }
       }
     }
 
+    // 啟動 UI 倒數計時
     function startCooldownUI(seconds) {
-      inputArea.disabled = true;
-      submitBtn.disabled = true;
-      
-      cooldownTimer = setInterval(() => {
-        statusTxt.innerText = `冷卻中... 請稍後 ${seconds} 秒`;
-        seconds--;
-        if (seconds < 0) {
-          clearInterval(cooldownTimer);
-          inputArea.disabled = false;
-          submitBtn.disabled = false;
-          statusTxt.innerText = '';
-          inputArea.value = '';
+      input.disabled = true;
+      btn.disabled = true;
+      let timeLeft = seconds;
+      status.textContent = `冷卻中... 請稍後 ${timeLeft} 秒`;
+
+      const timer = setInterval(() => {
+        timeLeft--;
+        if (timeLeft <= 0) {
+          clearInterval(timer);
+          input.disabled = false;
+          btn.disabled = false;
+          status.textContent = "";
+          input.value = "";
+          input.focus();
+        } else {
+          status.textContent = `冷卻中... 請稍後 ${timeLeft} 秒`;
         }
       }, 1000);
     }
 
-    submitBtn.addEventListener('click', () => {
-      const text = inputArea.value.trim();
+    // 發送按鈕事件
+    btn.addEventListener('click', () => {
+      const text = input.value.trim();
       if (!text) return;
 
-      submitBtn.disabled = true;
-      statusTxt.innerText = "發送中...";
+      input.disabled = true;
+      btn.disabled = true;
+      status.textContent = "發送中...";
 
-      // 將資料寫入 Firebase (Compat 寫法)
-      db.collection("messages").add({
+      push(ref(db, 'messages'), {
         content: text,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp() // 使用伺服器時間更精準
-      })
-      .then(() => {
-        const cooldownEnd = Date.now() + 30000;
-        localStorage.setItem('cooldown_end', cooldownEnd);
+        timestamp: Date.now()
+      }).then(() => {
+        localStorage.setItem('lastSentTime', Date.now());
         startCooldownUI(30);
-      })
-      .catch((error) => {
-        console.error("發送失敗: ", error);
-        statusTxt.innerText = "發生錯誤，請重試！";
-        submitBtn.disabled = false;
+      }).catch((error) => {
+        status.textContent = "發送失敗，請重試。";
+        input.disabled = false;
+        btn.disabled = false;
+        console.error(error);
       });
     });
 
+    // 載入時檢查冷卻
     checkCooldown();
   </script>
 </body>
